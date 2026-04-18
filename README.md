@@ -155,7 +155,7 @@ ERR op
 Um das Projekt zusätzlich gestalterisch aufzuwerten, wurde ein eigenes 3D-Gehäuse entworfen.  
 Das Gehäuse ist an den Kopf von **Calculon** aus *Futurama* angelehnt. Im unteren Bereich wurde ein passender Einschub modelliert, sodass der **Arduino Uno R4 Minima** im Gehäuse untergebracht werden kann.
 
-### Renderings / Bilder
+### Bilder
 
 ![3D-Modell des Calculon-Gehäuses](docs/images/calculon_front.jpg)
 
