@@ -1,6 +1,5 @@
 .DS_Store
-microcontroller_pc_client
 build/
-
-microcontroller_pc_client
 release/
+microcontroller_pc_client
+*.png
