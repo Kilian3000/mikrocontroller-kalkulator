@@ -150,7 +150,24 @@ ERR div0
 ERR parse
 ERR op
 ```
+## 3D-Gehäuse im Calculon-Design
 
+Um das Projekt zusätzlich gestalterisch aufzuwerten, wurde ein eigenes 3D-Gehäuse entworfen.  
+Das Gehäuse ist an den Kopf von **Calculon** aus *Futurama* angelehnt. Im unteren Bereich wurde ein passender Einschub modelliert, sodass der **Arduino Uno R4 Minima** im Gehäuse untergebracht werden kann.
+
+### Renderings / Bilder
+
+![3D-Modell des Calculon-Gehäuses](docs/images/calculon_front.jpg)
+
+![Geöffnete Ansicht mit eingesetztem Arduino Uno R4 Minima](docs/images/calculon_bottom.jpg)
+
+### 3D-Datei
+
+Die STL-Datei des Gehäuses befindet sich im Repository unter:
+
+[`assets/3d/Calculon.stl`](assets/3d/Calculon.stl)
+
+Damit ist neben der Software auch ein individuell gestaltetes Hardware-Element Teil des Projekts.
 ## Release
 
 Eine vorkompilierte macOS-Version steht im Release-Bereich des Repositories bereit.
