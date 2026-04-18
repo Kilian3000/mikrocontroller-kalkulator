@@ -33,7 +33,7 @@ cl /EHsc /std:c++17 microcontroller_pc_client.cpp
 g++ -std=c++17 -Wall -Wextra -pedantic microcontroller_pc_client.cpp -o microcontroller_pc_client
 ```
 
-## Ausfuehrung
+## Ausführung
 
 ### Variante 1: Port beim Start uebergeben
 
