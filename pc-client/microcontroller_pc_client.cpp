@@ -19,12 +19,17 @@
   #include <unistd.h>
 #endif
 
+// Ein einzelner Protokolleintrag für die Kommunikation.
+// timestamp = Zeitpunkt
+// direction = Richtung der Nachricht, z. B. "PC -> uC"
+// message = eigentliche Nachricht
 struct LogEntry {
     std::string timestamp;
     std::string direction;
     std::string message;
 };
 
+// Erzeugt einen Zeitstempel im Format YYYY-MM-DD HH:MM:SS.
 std::string makeTimestamp() {
     auto now = std::chrono::system_clock::now();
     std::time_t timeValue = std::chrono::system_clock::to_time_t(now);
@@ -41,6 +46,7 @@ std::string makeTimestamp() {
     return oss.str();
 }
 
+// Gibt eine kurze Hilfe zu den verfügbaren Befehlen im Terminal aus.
 void printHelp() {
     std::cout << "\nVerfuegbare Befehle:\n"
               << "  <a> <op> <b>      Ausdruck an den Mikrocontroller senden, z. B. 34 * 72\n"
@@ -49,14 +55,22 @@ void printHelp() {
               << "  :quit             Programm beenden\n\n";
 }
 
+
+// Diese Klasse kapselt den Zugriff auf die serielle Schnittstelle.
+// Sie unterstützt sowohl Windows als auch POSIX-Systeme wie macOS oder Linux.
 class SerialPort {
 public:
     SerialPort() = default;
     ~SerialPort() { close(); }
 
+    // Öffnet die serielle Schnittstelle und setzt die wichtigsten Parameter
+    // wie Baudrate, Datenbits, Stopbits und Parität.
     void open(const std::string& portName, int baudRate) {
 #ifdef _WIN32
         std::string fullPortName = portName;
+
+        // Unter Windows muss bei höheren COM-Ports ein spezielles Format (Nicht in Windows Getestet!)
+        // verwendet werden, z. B. "\\\\.\\COM10".
         if (portName.rfind("COM", 0) == 0 && portName.size() > 4) {
             fullPortName = "\\\\.\\" + portName;
         }
@@ -80,6 +94,7 @@ public:
             throw std::runtime_error("Serielle Schnittstelle konnte nicht konfiguriert werden.");
         }
 
+        // Standardkonfiguration: 8 Datenbits, keine Parität, 1 Stopbit.
         dcb.BaudRate = static_cast<DWORD>(baudRate);
         dcb.ByteSize = 8;
         dcb.Parity = NOPARITY;
@@ -100,6 +115,7 @@ public:
             throw std::runtime_error("Fehler beim Setzen der seriellen Parameter.");
         }
 
+        // Timeouts für Lese- und Schreibzugriffe setzen.
         COMMTIMEOUTS timeouts = {0};
         timeouts.ReadIntervalTimeout = 20;
         timeouts.ReadTotalTimeoutConstant = 20;
@@ -112,6 +128,7 @@ public:
             throw std::runtime_error("Serielle Timeouts konnten nicht gesetzt werden.");
         }
 #else
+        // Unter macOS/Linux wird der Port als Datei geöffnet.
         fd_ = ::open(portName.c_str(), O_RDWR | O_NOCTTY | O_SYNC);
         if (fd_ < 0) {
             throw std::runtime_error("Serielle Schnittstelle konnte nicht geoeffnet werden: " + std::string(std::strerror(errno)));
@@ -127,6 +144,7 @@ public:
         cfsetospeed(&tty, speed);
         cfsetispeed(&tty, speed);
 
+        // Konfiguration: 8 Datenbits, keine Parität, 1 Stopbit, keine Flow-Control.
         tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8;
         tty.c_iflag &= ~IGNBRK;
         tty.c_lflag = 0;
@@ -160,6 +178,8 @@ public:
 #endif
     }
 
+    // Sendet eine komplette Zeile an den Mikrocontroller.
+    // Am Ende wird automatisch ein Zeilenumbruch ergänzt.
     void writeLine(const std::string& text) {
         std::string payload = text + "\n";
 #ifdef _WIN32
@@ -171,11 +191,14 @@ public:
 #else
         ssize_t result = ::write(fd_, payload.c_str(), payload.size());
         if (result < 0 || static_cast<size_t>(result) != payload.size()) {
-            throw std::runtime_error("Senden ueber die serielle Schnittstelle fehlgeschlagen.");
+            throw std::runtime_error("Senden über die serielle Schnittstelle fehlgeschlagen.");
         }
 #endif
     }
 
+    // Liest eine Zeile von der seriellen Schnittstelle bis zum Zeilenende.
+    // Gibt true zurück, wenn eine vollständige Zeile empfangen wurde.
+    // Gibt false zurück, wenn das Timeout erreicht wurde.
     bool readLine(std::string& line, int timeoutMs) {
         line.clear();
         auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
@@ -193,10 +216,12 @@ public:
                 continue;
             }
 
+            // Carriage Return ignorieren, damit sowohl LF als auch CR/LF funktionieren.
             if (c == '\r') {
                 continue;
             }
 
+            // Eine nicht-leere Zeile ist vollständig, sobald '\n' erreicht wird.
             if (c == '\n') {
                 if (!line.empty()) {
                     return true;
@@ -216,6 +241,7 @@ private:
 #else
     int fd_ = -1;
 
+    // Ordnet numerische Baudraten den POSIX-Konstanten zu.
     static speed_t mapBaudRate(int baudRate) {
         switch (baudRate) {
             case 9600:   return B9600;
@@ -228,7 +254,12 @@ private:
         }
     }
 #endif
-
+  
+    // Liest genau ein Byte von der seriellen Schnittstelle.
+    // Rückgabewert:
+    //  > 0 = Byte wurde gelesen
+    //    0 = keine Daten vorhanden
+    //  < 0 = Fehler
     int readOneByte(char& c) {
 #ifdef _WIN32
         DWORD bytesRead = 0;
@@ -246,10 +277,11 @@ private:
     }
 };
 
+// Fügt nen neuen Eintrag zum Kommunikationsprotokoll hinzu.
 void addLog(std::vector<LogEntry>& log, const std::string& direction, const std::string& message) {
     log.push_back({makeTimestamp(), direction, message});
 }
-
+// Speichert das gesamte Kommunikationsprotokoll in ner Textdatei.
 bool saveLogToFile(const std::vector<LogEntry>& log, const std::string& fileName) {
     std::ofstream output(fileName);
     if (!output) {
@@ -267,10 +299,12 @@ bool saveLogToFile(const std::vector<LogEntry>& log, const std::string& fileName
 }
 
 int main(int argc, char* argv[]) {
+    // Standardwerte für Port, Baudrate und Antwort-Timeout.
     std::string portName;
     int baudRate = 115200;
     int responseTimeoutMs = 3000;
 
+    // Optional können Port und Baudrate als Kommandozeilenargumente übergeben werden.
     if (argc >= 2) {
         portName = argv[1];
     }
@@ -278,6 +312,7 @@ int main(int argc, char* argv[]) {
         baudRate = std::stoi(argv[2]);
     }
 
+    // Falls kein Port als Argument übergeben wurde, wird er im Terminal abgefragt
     if (portName.empty()) {
         std::cout << "Serielle Schnittstelle eingeben (z. B. COM3 oder /dev/cu.usbmodemXXXX): ";
         std::getline(std::cin, portName);
@@ -290,9 +325,12 @@ int main(int argc, char* argv[]) {
         std::cout << "Verbinde mit " << portName << " bei " << baudRate << " Baud ...\n";
         serial.open(portName, baudRate);
 
+        // Viele Arduino-Boards starten nach dem Öffnen des Ports neu. (Arduino Nano) ;(
+        // Deshalb wird kurz gewartet, bevor die Startmeldung gelesen wird.
         std::cout << "Warte auf Startmeldung des Arduino ...\n";
         std::this_thread::sleep_for(std::chrono::milliseconds(2000));
 
+        // Eventuelle Startmeldungen des Mikrocontrollers auslesen.
         std::string startupLine;
         while (serial.readLine(startupLine, 300)) {
             addLog(log, "uC -> PC", startupLine);
@@ -302,6 +340,7 @@ int main(int argc, char* argv[]) {
         std::cout << "Verbindung hergestellt.\n";
         printHelp();
 
+        // Hauptschleife für Benutzereingaben und serielle Kommunikation.
         while (true) {
             std::cout << "> ";
             std::string input;
@@ -317,11 +356,13 @@ int main(int argc, char* argv[]) {
                 break;
             }
 
+            // Hilfe erneut anzeigen.
             if (input == ":help") {
                 printHelp();
                 continue;
             }
 
+            // Kommunikationsprotokoll in Datei speichern.
             if (input.rfind(":save ", 0) == 0) {
                 std::string fileName = input.substr(6);
                 if (fileName.empty()) {
@@ -337,10 +378,12 @@ int main(int argc, char* argv[]) {
                 continue;
             }
 
+            // Ausdruck an den Mikrocontroller senden.
             serial.writeLine(input);
             addLog(log, "PC -> uC", input);
             std::cout << "[PC] " << input << '\n';
 
+            // Antwort vom Mikrocontroller lesen.
             std::string response;
             if (serial.readLine(response, responseTimeoutMs)) {
                 addLog(log, "uC -> PC", response);
