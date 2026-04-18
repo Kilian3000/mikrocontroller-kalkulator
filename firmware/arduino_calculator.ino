@@ -13,6 +13,7 @@
 
 namespace {
 
+// Wandelt eine numerische Baudrate in die passende termios-Konstante um.
 speed_t baudToSpeed(int baud) {
     switch (baud) {
         case 9600:   return B9600;
@@ -25,6 +26,7 @@ speed_t baudToSpeed(int baud) {
     }
 }
 
+// Erstellt einen Zeitstempel für optionale Logeinträge.
 std::string nowTimestamp() {
     auto now = std::chrono::system_clock::now();
     auto nowTime = std::chrono::system_clock::to_time_t(now);
@@ -41,6 +43,9 @@ std::string nowTimestamp() {
     return oss.str();
 }
 
+// Einfache Logger-Klasse.
+// Falls eine Logdatei angegeben wird, werden gesendete und empfangene Zeilen
+// mit Zeitstempel in diese Datei geschrieben.
 class Logger {
 public:
     Logger() = default;
@@ -54,7 +59,7 @@ public:
             enabled_ = true;
         }
     }
-
+    // direction ist z. B. "TX" oder "RX".
     void log(const std::string& direction, const std::string& line) {
         if (!enabled_) {
             return;
@@ -67,15 +72,15 @@ private:
     bool enabled_ = false;
     std::ofstream file_;
 };
-
+// Diese Klasse kapselt den Zugriff auf die serielle Schnittstelle unter macOS.
 class SerialPort {
 public:
     SerialPort() = default;
-
+    //Der serielle Port wird beim Beenden des Objekts automatisch geschlossen.
     ~SerialPort() {
         closePort();
     }
-
+    // Öffnet den seriellen Port und konfiguriert ihn mit termios.
     void openPort(const std::string& device, int baud) {
         closePort();
 
@@ -89,7 +94,7 @@ public:
             closePort();
             throw std::runtime_error("tcgetattr fehlgeschlagen");
         }
-
+        // Raw-Modus: keine automatische Zeichenumwandlung durch das System.
         cfmakeraw(&tty);
 
         speed_t speed = baudToSpeed(baud);
@@ -97,7 +102,7 @@ public:
             closePort();
             throw std::runtime_error("Baudrate konnte nicht gesetzt werden");
         }
-
+        // 8 Datenbits, keine Parität, 1 Stopbit.
         tty.c_cflag |= (CLOCAL | CREAD);
         tty.c_cflag &= ~PARENB;
         tty.c_cflag &= ~CSTOPB;
@@ -105,13 +110,16 @@ public:
         tty.c_cflag |= CS8;
 
 #ifdef CRTSCTS
+        // Hardware-Flow-Control deaktivieren.
         tty.c_cflag &= ~CRTSCTS;
 #endif
-
+        // Software-Flow-Control deaktivieren.
         tty.c_iflag &= ~(IXON | IXOFF | IXANY);
         tty.c_oflag = 0;
         tty.c_lflag = 0;
 
+        // Nicht blockierend lesen:
+        // VMIN = 0, VTIME = 1 => read() wartet kurz und liefert dann zurück.
         tty.c_cc[VMIN] = 0;
         tty.c_cc[VTIME] = 1;  // 0.1 Sekunden pro read()
 
@@ -119,10 +127,10 @@ public:
             closePort();
             throw std::runtime_error("tcsetattr fehlgeschlagen");
         }
-
+        // Ein- und Ausgabepuffer leeren, damit keine alten Daten stören.
         tcflush(fd_, TCIOFLUSH);
     }
-
+    // Schließt den seriellen Port, falls geöffnet.
     void closePort() {
         if (fd_ >= 0) {
             close(fd_);
@@ -130,6 +138,8 @@ public:
         }
     }
 
+    // Sendet eine komplette Zeile an den Arduino.
+    // Falls noch kein '\n' am Ende vorhanden ist, wird es ergänzt.
     void writeLine(const std::string& line) {
         std::string payload = line;
         if (payload.empty() || payload.back() != '\n') {
@@ -138,6 +148,9 @@ public:
         writeAll(payload.data(), payload.size());
     }
 
+
+    // Liest eine Zeile bis '\n' mit Timeout.
+    // '\r' wird ignoriert, damit CR/LF und LF unterstützt werden.
     bool readLine(std::string& outLine, std::chrono::milliseconds timeout) {
         outLine.clear();
         auto deadline = std::chrono::steady_clock::now() + timeout;
@@ -169,6 +182,8 @@ public:
     }
 
 private:
+    // Interne Hilfsfunktion, um sicherzustellen, dass wirklich alle Bytes
+    // geschrieben werden.
     void writeAll(const char* data, size_t len) {
         size_t writtenTotal = 0;
         while (writtenTotal < len) {
@@ -184,6 +199,7 @@ private:
     int fd_ = -1;
 };
 
+// Gibt eine kurze Hilfe zur Benutzung des Programms aus.
 void printUsage(const char* programName) {
     std::cerr << "Verwendung:\n";
     std::cerr << "  " << programName << " <serieller-port> [baudrate] [logdatei]\n\n";
@@ -192,20 +208,25 @@ void printUsage(const char* programName) {
     std::cerr << "  " << programName << " /dev/cu.usbmodem1101 115200 sitzung.log\n";
 }
 
-}  // namespace
+}  
 
 int main(int argc, char* argv[]) {
+    // Es muss mindestens der Port angegeben werden.
     if (argc < 2 || argc > 4) {
         printUsage(argv[0]);
         return 1;
     }
 
+    // 1. Argument: serieller Gerätename, z. B. /dev/cu.usbmodemXXXX
     std::string device = argv[1];
+
+    // 2. Argument optional: Baudrate, Standard ist 115200.
     int baud = 115200;
     if (argc >= 3) {
         baud = std::stoi(argv[2]);
     }
 
+    // 3. Argument optional: Pfad zu einer Logdatei.
     std::string logFile;
     if (argc == 4) {
         logFile = argv[3];
@@ -227,7 +248,8 @@ int main(int argc, char* argv[]) {
             std::cout << "Arduino: " << startupLine << "\n";
             logger.log("RX", startupLine);
         }
-
+        
+        // Hauptschleife: Benutzereingaben lesen, senden und Antwort anzeigen.
         while (true) {
             std::cout << "expr> " << std::flush;
 
@@ -237,6 +259,7 @@ int main(int argc, char* argv[]) {
                 break;
             }
 
+            // Mit "exit" oder "quit" kann das Programm beendet werden.
             if (input == "exit" || input == "quit") {
                 std::cout << "Programm beendet.\n";
                 break;
@@ -246,6 +269,7 @@ int main(int argc, char* argv[]) {
                 continue;
             }
 
+            // Eingabe an den Arduino senden.
             port.writeLine(input);
             logger.log("TX", input);
 
@@ -259,6 +283,7 @@ int main(int argc, char* argv[]) {
 
             logger.log("RX", response);
 
+            // Antwort auswerten.
             if (response.rfind("OK ", 0) == 0) {
                 std::cout << "Ergebnis: " << response.substr(3) << "\n";
             } else if (response.rfind("ERR ", 0) == 0) {
