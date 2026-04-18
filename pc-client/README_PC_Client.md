@@ -100,7 +100,7 @@ ERR div0
 Protokoll gespeichert: protokoll.txt
 ```
 
-## Hinweis fuer Phase 2
+## Hinweis für Phase 2
 
 Fuer die schriftliche Phase-2-Dokumentation kannst du diese Struktur verwenden:
 
@@ -112,7 +112,7 @@ Fuer die schriftliche Phase-2-Dokumentation kannst du diese Struktur verwenden:
 6. Build- und Startanleitung
 7. GitHub-Link
 
-## Moegliche naechste Schritte
+## Mögliche naechste Schritte
 
 - GitHub-Repository sauber anlegen
 - Arduino-Code und PC-Code gemeinsam strukturieren
